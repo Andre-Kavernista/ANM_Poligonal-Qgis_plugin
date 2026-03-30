@@ -137,14 +137,6 @@ anm_poligonal/
 
 ---
 
-## Limitações conhecidas
-
-- O algoritmo de ortogonalização opera em coordenadas planas (Cartesianas)
-- Para polígonos muito extensos em coordenadas geográficas, considere usar um CRS projetado local (ex.: SIRGAS 2000 / UTM zona 23S) antes do processamento
-- Polígonos com auto-interseções no esboço podem gerar resultados inesperados — valide a geometria de entrada antes com: Vetor → Ferramentas de Geometria → Verificar validade
-
----
-
 ## Versão e autoria
 
 - Versão: 1.0.0
