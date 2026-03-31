@@ -10,10 +10,9 @@ email=andre.kavernista@gmail.com
 category=Vector
 icon=icons/anm_icon.png
 tags=anm, mineração, polígono, rumos verdadeiros, poligonal, agência nacional de mineração
-homepage=https://www.linkedin.com/in/-andre-souza/
-tracker=
+homepage=https://github.com/Andre-Kavernista/ANM_Poligonal-Qgis_plugin
+tracker=https://github.com/Andre-Kavernista/ANM_Poligonal-Qgis_plugin/issues
 repository=https://github.com/Andre-Kavernista/ANM_Poligonal-Qgis_plugin
 experimental=False
 deprecated=False
-changelog=
-    1.0.0 - Lançamento oficial do complemento
+changelog=1.0.0 - Lançamento oficial do complemento
