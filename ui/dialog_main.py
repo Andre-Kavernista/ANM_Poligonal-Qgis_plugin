@@ -45,9 +45,11 @@ from ..core.processor import (
     clip_and_reortogonalize,
     export_shapefile,
     export_txt_anm,
+    export_csv_anm,
     load_layer_to_canvas,
     area_geodesica_ha,
     decimal_to_dms_anm,
+    decimal_to_dms_components,
     CRS_ANM,
 )
 from ..utils.map_tool import (
@@ -375,7 +377,7 @@ class ANMPoligonalDialog(QDialog):
         self.rb_from_layer  = QRadioButton('Usar camada existente no projeto')
         self.rb_from_canvas = QRadioButton('Usar esboço desenhado (aba "✏ Desenhar Esboço")')
         self.rb_from_file   = QRadioButton('Carregar shapefile externo do disco')
-        self.rb_from_layer.setChecked(True)
+        self.rb_from_canvas.setChecked(True)  # padrão: fluxo de desenho direto no canvas
         self._src_group = QButtonGroup()
         self._src_group.addButton(self.rb_from_layer,  0)
         self._src_group.addButton(self.rb_from_canvas, 1)
@@ -403,9 +405,10 @@ class ANMPoligonalDialog(QDialog):
         self.lbl_feat_count = QLabel('')
         self.lbl_feat_count.setStyleSheet(f'color:{C["text_muted"]}; font-size:11px;')
         lg.addWidget(self.lbl_feat_count, 2, 1, 1, 2)
-        sg.addWidget(self._pnl_layer)
+        # _pnl_layer adicionado ao layout mas oculto (canvas é o padrão)
+        sg.addWidget(self._pnl_layer); self._pnl_layer.setVisible(False)
 
-        # Subpainel esboço desenhado
+        # Subpainel esboço desenhado — visível por padrão (opção marcada)
         self._pnl_canvas = QWidget()
         cl = QHBoxLayout(self._pnl_canvas); cl.setContentsMargins(0,4,0,0)
         self.lbl_drawn_status = QLabel('Nenhum esboço desenhado ainda.')
@@ -413,9 +416,9 @@ class ANMPoligonalDialog(QDialog):
         btn_go = QPushButton('✏ Ir para Desenhar'); btn_go.setMaximumWidth(180)
         btn_go.clicked.connect(lambda: self.tabs.setCurrentIndex(1))
         cl.addWidget(self.lbl_drawn_status); cl.addWidget(btn_go); cl.addStretch()
-        sg.addWidget(self._pnl_canvas); self._pnl_canvas.setVisible(False)
+        sg.addWidget(self._pnl_canvas); self._pnl_canvas.setVisible(True)
 
-        # Subpainel shapefile externo
+        # Subpainel shapefile externo — oculto por padrão
         self._pnl_file = QWidget()
         fl = QHBoxLayout(self._pnl_file); fl.setContentsMargins(0,4,0,0); fl.setSpacing(6)
         self.le_ext_shp = QLineEdit()
@@ -460,23 +463,49 @@ class ANMPoligonalDialog(QDialog):
         grp_out = QGroupBox('Arquivos de Saída')
         og = QGridLayout(grp_out); og.setHorizontalSpacing(8); og.setVerticalSpacing(6)
         og.setColumnStretch(1, 1)
+
+        # --- Shapefile ---
         og.addWidget(QLabel('Shapefile (.shp):'), 0, 0)
-        self.le_shp = QLineEdit(); self.le_shp.setPlaceholderText('Caminho base')
+        self.le_shp = QLineEdit(); self.le_shp.setPlaceholderText('Caminho base (deixe vazio para temporário)')
         og.addWidget(self.le_shp, 0, 1)
         bs = QPushButton('...'); bs.setMaximumWidth(30); bs.clicked.connect(self._browse_shp)
         og.addWidget(bs, 0, 2)
-        og.addWidget(QLabel('TXT ANM:'), 1, 0)
-        self.le_txt = QLineEdit(); self.le_txt.setPlaceholderText('Caminho base')
-        og.addWidget(self.le_txt, 1, 1)
+
+        # --- Checkbox de propagação automática ---
+        self.chk_mirror_paths = QCheckBox('Repetir destino do shapefile aos demais arquivos de saída')
+        self.chk_mirror_paths.setChecked(True)
+        self.chk_mirror_paths.setToolTip(
+            'Ao definir o caminho do shapefile, os caminhos do TXT e do CSV\n'
+            'serão preenchidos automaticamente com o mesmo nome e diretório\n'
+            '(apenas a extensão muda). Desmarque para definir cada um manualmente.'
+        )
+        og.addWidget(self.chk_mirror_paths, 1, 0, 1, 3)
+
+        # --- TXT ANM ---
+        og.addWidget(QLabel('TXT ANM:'), 2, 0)
+        self.le_txt = QLineEdit(); self.le_txt.setPlaceholderText('Caminho base (deixe vazio para temporário)')
+        og.addWidget(self.le_txt, 2, 1)
         bt = QPushButton('...'); bt.setMaximumWidth(30); bt.clicked.connect(self._browse_txt)
-        og.addWidget(bt, 1, 2)
-        og.addWidget(QLabel('Observação:'), 2, 0)
+        og.addWidget(bt, 2, 2)
+
+        # --- CSV ANM (inserção em lote no REPEM) ---
+        og.addWidget(QLabel('CSV REPEM:'), 3, 0)
+        self.le_csv = QLineEdit(); self.le_csv.setPlaceholderText('Caminho base (deixe vazio para temporário)')
+        og.addWidget(self.le_csv, 3, 1)
+        bc = QPushButton('...'); bc.setMaximumWidth(30); bc.clicked.connect(self._browse_csv)
+        og.addWidget(bc, 3, 2)
+
+        # --- Observação ---
+        og.addWidget(QLabel('Observação:'), 4, 0)
         self.le_obs = QLineEdit(); self.le_obs.setPlaceholderText('Ex.: Requerimento ANM #12345')
-        og.addWidget(self.le_obs, 2, 1, 1, 2)
+        og.addWidget(self.le_obs, 4, 1, 1, 2)
+
+        # --- Checkboxes de opções ---
         self.chk_load = QCheckBox('Carregar resultado no mapa automaticamente')
-        self.chk_load.setChecked(True); og.addWidget(self.chk_load, 3, 0, 1, 3)
+        self.chk_load.setChecked(True); og.addWidget(self.chk_load, 5, 0, 1, 3)
         self.chk_header = QCheckBox('Incluir cabeçalho no TXT')
-        self.chk_header.setChecked(True); og.addWidget(self.chk_header, 4, 0, 1, 3)
+        self.chk_header.setChecked(True); og.addWidget(self.chk_header, 6, 0, 1, 3)
+
         lay.addWidget(grp_out)
         lay.addStretch()
         scroll.setWidget(inner); ol.addWidget(scroll)
@@ -733,16 +762,18 @@ class ANMPoligonalDialog(QDialog):
     # -----------------------------------------------------------------------
 
     def _connect_signals(self):
+        # Troca de origem do esboço → alterna visibilidade dos subpainéis
         self.rb_from_layer.toggled.connect(self._on_source_changed)
         self.rb_from_canvas.toggled.connect(self._on_source_changed)
         self.rb_from_file.toggled.connect(self._on_source_changed)
         self.cb_layer.currentIndexChanged.connect(self._on_layer_changed)
         self.rb_selected.toggled.connect(self._update_feat_count)
 
-        # Atualização automática da lista de camadas via sinais do projeto
+        # Atualiza a lista de camadas automaticamente quando o projeto muda
         QgsProject.instance().layersAdded.connect(self._on_project_layers_changed)
         QgsProject.instance().layersRemoved.connect(self._on_project_layers_changed)
 
+        # Qualquer mudança nos parâmetros de processamento invalida o cache de resultados
         for sig in [self.cb_layer.currentIndexChanged,
                     self.rb_selected.toggled, self.rb_all.toggled,
                     self.spin_steps.valueChanged,
@@ -761,6 +792,9 @@ class ANMPoligonalDialog(QDialog):
         self.btn_clear_snap.clicked.connect(self._clear_snap_vertices)
         self.btn_apply_restr.clicked.connect(self._apply_restrictions)
         self.btn_clear_restr.clicked.connect(self._clear_restrictions)
+
+        # Propaga o caminho do SHP para TXT e CSV quando o checkbox estiver marcado
+        self.le_shp.textChanged.connect(self._on_shp_path_changed)
 
     # -----------------------------------------------------------------------
     # Origem e camadas
@@ -919,6 +953,7 @@ class ANMPoligonalDialog(QDialog):
     # -----------------------------------------------------------------------
 
     def _invalidate_cache(self):
+        # Descarta resultados anteriores para forçar reprocessamento na próxima ação
         self._results.clear(); self._final_results.clear()
         self._overlap_hl.clear()
         self._set_status('Configuração alterada — clique Pré-visualizar ou Gerar Arquivos.')
@@ -1122,15 +1157,18 @@ class ANMPoligonalDialog(QDialog):
     def _on_generate(self):
         shp = self.le_shp.text().strip()
         txt = self.le_txt.text().strip()
+        csv_out = self.le_csv.text().strip()
 
-        # Se nenhum caminho foi indicado, usa arquivos temporários e carrega no mapa
-        use_temp = not shp and not txt
+        # Se nenhum caminho foi indicado, gera em diretório temporário do SO e
+        # carrega tudo no projeto (comportamento equivalente ao "teste rápido")
+        use_temp = not shp and not txt and not csv_out
         if use_temp:
             import tempfile, uuid
             tmp_dir  = tempfile.gettempdir()
             tmp_base = os.path.join(tmp_dir, f'anm_{uuid.uuid4().hex[:8]}')
-            shp = tmp_base
-            txt = tmp_base
+            shp     = tmp_base
+            txt     = tmp_base
+            csv_out = tmp_base
             # Força carregamento automático quando usando temporário
             _orig_load = self.chk_load.isChecked()
             self.chk_load.setChecked(True)
@@ -1148,9 +1186,9 @@ class ANMPoligonalDialog(QDialog):
         self.progress.setVisible(True); self.progress.setMaximum(n); erros = []
 
         for i, res in enumerate(results):
-            self.progress.setValue(i+1)
-            poly_suf = res.get('suffix','')
-            num_suf  = f'_poly_{res.get("_poly_idx",i)+1:03d}' if batch else ''
+            self.progress.setValue(i + 1)
+            poly_suf = res.get('suffix', '')
+            num_suf  = f'_poly_{res.get("_poly_idx", i) + 1:03d}' if batch else ''
             full_suf = f'{num_suf}{poly_suf}'
             try:
                 if shp:
@@ -1160,13 +1198,17 @@ class ANMPoligonalDialog(QDialog):
                     self._log(f'✔ SHP: {os.path.basename(p)}')
                     if self.chk_load.isChecked():
                         load_layer_to_canvas(p, f'ANM_{os.path.splitext(os.path.basename(p))[0]}')
+
                 if txt:
-                    base = txt[:-4] if txt.lower().endswith('.txt') else txt
+                    base = txt
+                    for _ext in ('.txt', '.TXT'):
+                        if base.endswith(_ext):
+                            base = base[:-len(_ext)]
+                            break
                     p = f'{base}{full_suf}.txt'
                     export_txt_anm(res['vertices'], p,
                                    include_header=self.chk_header.isChecked())
                     self._log(f'✔ TXT: {os.path.basename(p)}')
-                    # Carrega o TXT como tabela no projeto (sem geometria)
                     if use_temp or self.chk_load.isChecked():
                         txt_name = os.path.splitext(os.path.basename(p))[0]
                         p_uri = p.replace('\\', '/')
@@ -1178,9 +1220,34 @@ class ANMPoligonalDialog(QDialog):
                         txt_lyr = QgsVectorLayer(uri, f'TXT_{txt_name}', 'delimitedtext')
                         if txt_lyr.isValid():
                             QgsProject.instance().addMapLayer(txt_lyr)
-                            self._log(f'  ℹ TXT carregado como tabela no projeto.')
+                            self._log('  ℹ TXT carregado como tabela no projeto.')
                         else:
                             self._log(f'  ℹ TXT salvo em: {p}')
+
+                if csv_out:
+                    base = csv_out
+                    for _ext in ('.csv', '.CSV'):
+                        if base.endswith(_ext):
+                            base = base[:-len(_ext)]
+                            break
+                    p = f'{base}{full_suf}.csv'
+                    export_csv_anm(res['vertices'], p)
+                    self._log(f'✔ CSV REPEM: {os.path.basename(p)}')
+                    if use_temp or self.chk_load.isChecked():
+                        csv_name = os.path.splitext(os.path.basename(p))[0]
+                        p_uri = p.replace('\\', '/')
+                        uri = (f'file:///{p_uri}'
+                               f'?delimiter=%3B'
+                               f'&useHeader=no'
+                               f'&type=csv'
+                               f'&geomType=none')
+                        csv_lyr = QgsVectorLayer(uri, f'CSV_{csv_name}', 'delimitedtext')
+                        if csv_lyr.isValid():
+                            QgsProject.instance().addMapLayer(csv_lyr)
+                            self._log('  ℹ CSV REPEM carregado como tabela no projeto.')
+                        else:
+                            self._log(f'  ℹ CSV REPEM salvo em: {p}')
+
             except Exception as e:
                 erros.append(str(e)); self._log(f'✗ {e}')
 
@@ -1190,12 +1257,14 @@ class ANMPoligonalDialog(QDialog):
             self.chk_load.setChecked(_orig_load)
 
         if erros:
-            QMessageBox.warning(self,'ANM Poligonal',
-                f'Concluído com {len(erros)} erro(s):\n'+'\n'.join(erros))
+            QMessageBox.warning(self, 'ANM Poligonal',
+                f'Concluído com {len(erros)} erro(s):\n' + '\n'.join(erros))
         elif use_temp:
-            self._set_status(f'✔ {n} arquivo(s) temporário(s) gerado(s) e carregado(s) no mapa.', C['success'])
+            self._set_status(
+                f'✔ {n} arquivo(s) temporário(s) gerado(s) e carregado(s) no mapa.',
+                C['success'])
         else:
-            QMessageBox.information(self,'ANM Poligonal',
+            QMessageBox.information(self, 'ANM Poligonal',
                 f'{n} polígono(s) exportado(s) com sucesso!')
             self._set_status(f'✔ {n} arquivo(s) gerado(s).', C['success'])
 
@@ -1252,16 +1321,44 @@ class ANMPoligonalDialog(QDialog):
     # -----------------------------------------------------------------------
 
     def _browse_shp(self):
-        p,_ = QFileDialog.getSaveFileName(self,'Salvar Shapefile ANM','','Shapefile (*.shp)')
-        if p: self.le_shp.setText(p)
+        p, _ = QFileDialog.getSaveFileName(self, 'Salvar Shapefile ANM', '', 'Shapefile (*.shp)')
+        if p:
+            self.le_shp.setText(p)
+            # _on_shp_path_changed é disparado automaticamente via textChanged
 
     def _browse_txt(self):
-        p,_ = QFileDialog.getSaveFileName(self,'Salvar TXT ANM','','TXT (*.txt)')
-        if p: self.le_txt.setText(p)
+        p, _ = QFileDialog.getSaveFileName(self, 'Salvar TXT ANM', '', 'Arquivo de texto (*.txt)')
+        if p:
+            self.le_txt.setText(p)
+
+    def _browse_csv(self):
+        p, _ = QFileDialog.getSaveFileName(self, 'Salvar CSV REPEM (ANM)', '', 'Arquivo CSV (*.csv)')
+        if p:
+            self.le_csv.setText(p)
+
+    def _on_shp_path_changed(self, shp_path: str):
+        """
+        Propaga o caminho do shapefile para TXT e CSV quando o checkbox
+        'Repetir destino do shapefile aos demais arquivos de saída' estiver marcado.
+        Troca apenas a extensão, preservando diretório e nome base.
+        """
+        if not self.chk_mirror_paths.isChecked():
+            return
+        if not shp_path.strip():
+            self.le_txt.setText('')
+            self.le_csv.setText('')
+            return
+        base = shp_path
+        for ext in ('.shp', '.SHP'):
+            if base.endswith(ext):
+                base = base[:-len(ext)]
+                break
+        self.le_txt.setText(base + '.txt')
+        self.le_csv.setText(base + '.csv')
 
     def _browse_ext_shp(self):
         """Abre diálogo para selecionar shapefile externo como entrada."""
-        p,_ = QFileDialog.getOpenFileName(
+        p, _ = QFileDialog.getOpenFileName(
             self, 'Selecionar Shapefile de Entrada', '', 'Shapefile (*.shp)'
         )
         if p:
@@ -1273,26 +1370,33 @@ class ANMPoligonalDialog(QDialog):
     # -----------------------------------------------------------------------
 
     def _save_settings(self):
-        s = QSettings('ANMPoligonal','Plugin')
-        s.setValue('shp',    self.le_shp.text())
-        s.setValue('txt',    self.le_txt.text())
-        s.setValue('steps',  self.spin_steps.value())
-        s.setValue('load',   self.chk_load.isChecked())
-        s.setValue('header', self.chk_header.isChecked())
-        s.setValue('dir',    self.cb_direction.currentIndex())
-        s.setValue('rb_all', self.rb_all.isChecked())
+        s = QSettings('ANMPoligonal', 'Plugin')
+        s.setValue('shp',          self.le_shp.text())
+        s.setValue('txt',          self.le_txt.text())
+        s.setValue('csv',          self.le_csv.text())
+        s.setValue('mirror_paths', self.chk_mirror_paths.isChecked())
+        s.setValue('steps',        self.spin_steps.value())
+        s.setValue('load',         self.chk_load.isChecked())
+        s.setValue('header',       self.chk_header.isChecked())
+        s.setValue('dir',          self.cb_direction.currentIndex())
+        s.setValue('rb_all',       self.rb_all.isChecked())
         # Salva geometria da janela (posição + tamanho)
         s.setValue('window_geometry', self.saveGeometry())
 
     def _restore_settings(self):
-        s = QSettings('ANMPoligonal','Plugin')
-        self.le_shp.setText(s.value('shp',''))
-        self.le_txt.setText(s.value('txt',''))
-        self.spin_steps.setValue(int(s.value('steps',3)))
-        self.chk_load.setChecked(s.value('load',True,type=bool))
-        self.chk_header.setChecked(s.value('header',True,type=bool))
-        self.cb_direction.setCurrentIndex(int(s.value('dir',0)))
-        self.rb_all.setChecked(s.value('rb_all',True,type=bool))
+        s = QSettings('ANMPoligonal', 'Plugin')
+        # Desconecta temporariamente o sinal para evitar propagação durante restore
+        self.le_shp.textChanged.disconnect(self._on_shp_path_changed)
+        self.le_shp.setText(s.value('shp', ''))
+        self.le_txt.setText(s.value('txt', ''))
+        self.le_csv.setText(s.value('csv', ''))
+        self.chk_mirror_paths.setChecked(s.value('mirror_paths', True, type=bool))
+        self.le_shp.textChanged.connect(self._on_shp_path_changed)
+        self.spin_steps.setValue(int(s.value('steps', 3)))
+        self.chk_load.setChecked(s.value('load', True, type=bool))
+        self.chk_header.setChecked(s.value('header', True, type=bool))
+        self.cb_direction.setCurrentIndex(int(s.value('dir', 0)))
+        self.rb_all.setChecked(s.value('rb_all', True, type=bool))
         self.rb_selected.setChecked(not self.rb_all.isChecked())
         # Restaura geometria da janela — validada logo em seguida no showEvent
         geom = s.value('window_geometry')

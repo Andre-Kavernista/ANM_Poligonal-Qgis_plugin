@@ -137,6 +137,7 @@ anm_poligonal/
 
 ---
 
+
 ## Versão e autoria
 
 - Versão: 1.0.0
