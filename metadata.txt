@@ -2,7 +2,7 @@
 name=ANM Poligonal
 qgisMinimumVersion=3.22
 qgisMaximumVersion=4.99
-description=Gera polígonos em rumos verdadeiros (N-S / L-O) conforme normas ANM, com exportação SHP + TXT em EPSG:4674.
+description=Gera polígonos em rumos verdadeiros (N-S / L-O) conforme normas ANM, com exportação SHP + TXT + CSV em EPSG:4674.
 about=Plugin para geração de polígonos ANM com segmentos estritamente N-S e L-O, ortogonalização de esboço, camadas de restrição, processamento em lote e exportação shapefile/TXT no formato da Agência Nacional de Mineração.
 version=1.0.0
 author=André Cunha de Souza
